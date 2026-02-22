@@ -1,11 +1,7 @@
 """
-allocation.py — Méthodes d'allocation market-neutral.
+allocation.py — Allocation Equal Risk Contribution (ERC) Long-Only.
 
-Méthodes :
-  1. Equal Weight  (EW)
-  2. Equal Risk Contribution (ERC)
-
-Contrainte market-neutral : Σ w_long = +1,  Σ w_short = -1
+Le portefeuille est 100% investi (Σ w = 1, w_i ≥ 0).
 """
 
 import pandas as pd
@@ -14,36 +10,7 @@ from scipy.optimize import minimize
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  1. Equal Weight
-# ═══════════════════════════════════════════════════════════════════
-
-def equal_weight(long_list: list, short_list: list) -> pd.Series:
-    """
-    Allocation Equal Weight market-neutral.
-    - Chaque long  : +1 / n_long
-    - Chaque short : -1 / n_short
-
-    Returns : Series(ticker → weight)
-    """
-    weights = {}
-    n_long  = len(long_list)
-    n_short = len(short_list)
-
-    if n_long > 0:
-        w_l = 1.0 / n_long
-        for t in long_list:
-            weights[t] = w_l
-
-    if n_short > 0:
-        w_s = -1.0 / n_short
-        for t in short_list:
-            weights[t] = w_s
-
-    return pd.Series(weights)
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  2. Equal Risk Contribution (ERC)
+#  ERC Long-Only
 # ═══════════════════════════════════════════════════════════════════
 
 def _erc_weights_long_only(cov: pd.DataFrame, tickers: list) -> np.ndarray:
@@ -52,8 +19,6 @@ def _erc_weights_long_only(cov: pd.DataFrame, tickers: list) -> np.ndarray:
     de tickers (long seulement, poids positifs normalisés à 1).
 
     min  Σ_i Σ_j ( w_i * (Σ w)_i - w_j * (Σ w)_j )^2
-
-    On utilise l'approche classique d'optimisation numérique.
     """
     n = len(tickers)
     if n == 0:
@@ -68,7 +33,6 @@ def _erc_weights_long_only(cov: pd.DataFrame, tickers: list) -> np.ndarray:
         sigma = w @ cov_sub @ w
         if sigma <= 0:
             return 1e12
-        # risk contributions
         marginal = cov_sub @ w
         rc = w * marginal
         rc_target = sigma / n
@@ -89,54 +53,32 @@ def _erc_weights_long_only(cov: pd.DataFrame, tickers: list) -> np.ndarray:
         return np.ones(n) / n
 
 
-def erc_weights(returns: pd.DataFrame,
-                long_list: list,
-                short_list: list,
-                window: int = 12) -> pd.Series:
+def erc_allocation(returns: pd.DataFrame,
+                   stock_list: list,
+                   window: int = 12) -> pd.Series:
     """
-    Allocation ERC market-neutral.
-    On calcule la matrice de covariance sur les `window` dernières observations,
-    puis on optimise séparément pour le côté long et le côté short.
+    Allocation ERC Long-Only.
+    Calcule la matrice de covariance sur les `window` dernières observations,
+    puis optimise pour que chaque titre contribue également au risque.
 
-    Returns : Series(ticker → weight), avec Σ long = +1 et Σ short = -1.
+    Returns : Series(ticker → weight), avec Σ = 1, tous positifs.
     """
-    all_tickers = long_list + short_list
-    sub = returns[all_tickers].dropna(axis=0, how="all")
+    sub = returns[stock_list].dropna(axis=0, how="all")
 
     # Si pas assez de données → fallback equal weight
     if len(sub) < max(window, 3):
-        return equal_weight(long_list, short_list)
+        n = len(stock_list)
+        if n == 0:
+            return pd.Series(dtype=float)
+        return pd.Series(1.0 / n, index=stock_list)
 
     # Covariance sur les dernières observations
     cov = sub.iloc[-window:].cov()
 
-    weights = {}
-
-    # Long
-    if long_list:
-        w_l = _erc_weights_long_only(cov, long_list)
-        for i, t in enumerate(long_list):
-            weights[t] = w_l[i]   # positif, somme = 1
-
-    # Short
-    if short_list:
-        w_s = _erc_weights_long_only(cov, short_list)
-        for i, t in enumerate(short_list):
-            weights[t] = -w_s[i]  # négatif, somme = -1
-
-    return pd.Series(weights)
+    w = _erc_weights_long_only(cov, stock_list)
+    return pd.Series(w, index=stock_list)
 
 
-# ═══════════════════════════════════════════════════════════════════
-#  3. Dispatch par nom
-# ═══════════════════════════════════════════════════════════════════
-
-ALLOC_FUNCS = {
-    "equal_weight": lambda long, short, **kw: equal_weight(long, short),
-    "erc":          lambda long, short, **kw: erc_weights(kw["returns"], long, short),
-}
-
-
-def allocate(method: str, long_list: list, short_list: list, **kwargs) -> pd.Series:
-    """Retourne les poids market-neutral pour la méthode choisie."""
-    return ALLOC_FUNCS[method](long_list, short_list, **kwargs)
+def allocate(stock_list: list, returns: pd.DataFrame, window: int = 12) -> pd.Series:
+    """Point d'entrée unique pour l'allocation ERC Long-Only."""
+    return erc_allocation(returns, stock_list, window=window)

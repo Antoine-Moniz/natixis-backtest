@@ -1,26 +1,6 @@
-# Python
 __pycache__/
-*.py[cod]
-*.pyo
-*.egg-info/
-dist/
-build/
-.eggs/
-
-# Virtual env
-venv/
-.env/
-
-# IDE
+*.pyc
 .vscode/
-.idea/
-
-# Data cache
 data_cache/
-
-# OS
-Thumbs.db
-.DS_Store
-
-# Jupyter
-.ipynb_checkpoints/
+*.xlsx
+*.xls

@@ -1,15 +1,15 @@
 """
-backtest.py — Moteur de backtest L/S market-neutral.
+backtest.py — Moteur de backtest Long-Only ERC.
 
-Exécute le backtest pour une combinaison (signal, allocation, stop-loss)
-et renvoie les PnL, equity curve, turnover et coûts.
+Exécute le backtest avec score composite + allocation ERC,
+et renvoie les PnL, equity curve, turnover, coûts et les poids de la dernière période.
 """
 
 import pandas as pd
 import numpy as np
 
-from config import START_DATE, END_DATE
-from signals import compute_signal, make_long_short_buckets
+from config import START_DATE, END_DATE, N_STOCKS
+from signals import select_top_n
 from allocation import allocate
 from costs import compute_turnover, compute_cost
 from data_loader import get_members_at_date
@@ -22,7 +22,7 @@ from risk import (
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  Dispatch stop-loss
+#  Dispatch stop-loss (long-only : on ne gère que les positions > 0)
 # ═══════════════════════════════════════════════════════════════════
 
 def _apply_stoploss(stoploss_type: str,
@@ -57,34 +57,31 @@ def _apply_stoploss(stoploss_type: str,
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  Backtest unitaire
+#  Backtest Long-Only
 # ═══════════════════════════════════════════════════════════════════
 
 def run_backtest(
     prices: pd.DataFrame,
     returns: pd.DataFrame,
     df_long: pd.DataFrame,
-    signal_name: str,
-    alloc_method: str,
     stoploss_type: str = "position",
     verbose: bool = False,
 ) -> dict:
     """
-    Exécute un backtest pour UNE combinaison (signal, allocation, stoploss).
+    Exécute le backtest Long-Only avec score composite + ERC.
 
     Parameters
     ----------
     prices       : DataFrame (date × ticker) — prix mensuels
     returns      : DataFrame (date × ticker) — rendements mensuels
     df_long      : DataFrame format long (date, ticker, px_last)
-    signal_name  : nom du signal ("momentum", "mean_reversion", "vol_spread")
-    alloc_method : méthode d'allocation ("equal_weight", "erc")
     stoploss_type: type de stop-loss ("position", "trailing", "portfolio", "volatility")
     verbose      : affiche le détail à chaque date
 
     Returns
     -------
-    dict avec clés : pnl, cumulative, turnover_log, cost_log
+    dict avec clés : pnl, cumulative, turnover_log, cost_log, n_stocks,
+                     last_weights, last_date
     """
     # ── Dates de rebalancement dans la fenêtre ──
     mask = (prices.index >= pd.Timestamp(START_DATE)) & \
@@ -96,40 +93,34 @@ def run_backtest(
     cumul_list    = []
     turnover_list = []
     cost_list     = []
-    n_long_list   = []
-    n_short_list  = []
+    n_stocks_list = []
     dates_used    = []
 
     nav          = 1.0
     nav_peak     = 1.0
     prev_weights = pd.Series(dtype=float)
+    prev_stocks  = []  # pour le buffer de turnover
     entry_prices = pd.Series(dtype=float)
     peak_prices  = pd.Series(dtype=float)
-    port_rets_so_far = pd.Series(dtype=float)   # pour stop vol
+    port_rets_so_far = pd.Series(dtype=float)
+    last_weights = pd.Series(dtype=float)
 
     for date in rebal_dates:
         t = prices.index.get_loc(date)
 
-        # ── 1. Signal ──
-        signal = compute_signal(signal_name, prices, t)
-        if signal.empty:
-            continue
-
-        # ── 2. Univers à la date ──
+        # ── 1. Univers à la date ──
         members = get_members_at_date(df_long, date)
 
-        # ── 3. Buckets Long / Short ──
-        long_list, short_list = make_long_short_buckets(signal, members=members)
-        if not long_list or not short_list:
+        # ── 2. Sélection top N par score composite (avec buffer) ──
+        stock_list = select_top_n(prices, t, members=members, n=N_STOCKS,
+                                  prev_stocks=prev_stocks)
+        if not stock_list:
             continue
 
-        # ── 4. Allocation ──
-        weights = allocate(
-            alloc_method, long_list, short_list,
-            returns=returns.iloc[:t + 1],
-        )
+        # ── 3. Allocation ERC Long-Only ──
+        weights = allocate(stock_list, returns=returns.iloc[:t + 1])
 
-        # ── 5. Stop-loss ──
+        # ── 4. Stop-loss ──
         current_prices_row = prices.iloc[t]
 
         if stoploss_type == "position" and not entry_prices.empty:
@@ -156,21 +147,25 @@ def run_backtest(
                 portfolio_returns=port_rets_so_far,
             )
 
-        # ── 6. Turnover & coûts ──
+        # Renormaliser les poids après stop-loss (on reste 100% investi)
+        w_sum = weights.sum()
+        if w_sum > 0:
+            weights = weights / w_sum
+
+        # ── 5. Turnover & coûts ──
         to   = compute_turnover(weights, prev_weights)
         cost = compute_cost(to)
 
-        # ── 7. Rendement du portefeuille sur la période ──
+        # ── 6. Rendement du portefeuille sur la période ──
         period_ret = returns.iloc[t]
         common = weights.index.intersection(period_ret.dropna().index)
         port_ret = (weights[common] * period_ret[common]).sum() - cost
 
-        # ── 8. Mise à jour de la NAV ──
+        # ── 7. Mise à jour de la NAV ──
         nav *= (1 + port_ret)
         nav_peak = max(nav_peak, nav)
 
-        # ── 9. Mise à jour du suivi des positions ──
-        # Entry prices : conserver l'ancien prix d'entrée si la position existait déjà
+        # ── 8. Mise à jour du suivi des positions ──
         new_entry = current_prices_row.reindex(weights.index).copy()
         for ticker in weights.index:
             if ticker in prev_weights.index and prev_weights.get(ticker, 0) != 0:
@@ -188,85 +183,42 @@ def run_backtest(
                 old_peak = peak_prices.get(ticker, np.nan)
                 if pd.isna(old_peak):
                     continue
-                if weights.get(ticker, 0) > 0:
-                    new_peak[ticker] = max(old_peak, curr)
-                elif weights.get(ticker, 0) < 0:
-                    new_peak[ticker] = min(old_peak, curr)
+                new_peak[ticker] = max(old_peak, curr)
         peak_prices = new_peak.dropna()
 
-        # ── 10. Stocker les résultats ──
+        # ── 9. Stocker les résultats ──
         pnl_list.append(port_ret)
         cumul_list.append(nav)
         turnover_list.append(to)
         cost_list.append(cost)
-        n_long_list.append(len(long_list))
-        n_short_list.append(len(short_list))
+        n_stocks_list.append(len(stock_list))
         dates_used.append(date)
 
         port_rets_so_far = pd.Series(pnl_list, index=dates_used)
         prev_weights = weights.copy()
+        prev_stocks = stock_list
+        last_weights = weights.copy()
+
+        if verbose:
+            print(f"  {date.strftime('%Y-%m')} | "
+                  f"N={len(stock_list):3d} | "
+                  f"Ret={port_ret:+.2%} | "
+                  f"NAV={nav:.4f} | "
+                  f"TO={to:.2%}")
 
     # ── Construction des Series de sortie ──
     pnl          = pd.Series(pnl_list,      index=dates_used, name="pnl")
     cumulative   = pd.Series(cumul_list,     index=dates_used, name="cumulative")
     turnover_log = pd.Series(turnover_list,  index=dates_used, name="turnover")
     cost_log     = pd.Series(cost_list,      index=dates_used, name="cost")
-
-    n_long_log   = pd.Series(n_long_list,   index=dates_used, name="n_long")
-    n_short_log  = pd.Series(n_short_list,  index=dates_used, name="n_short")
+    n_stocks_log = pd.Series(n_stocks_list,  index=dates_used, name="n_stocks")
 
     return {
         "pnl":          pnl,
         "cumulative":   cumulative,
         "turnover_log": turnover_log,
         "cost_log":     cost_log,
-        "n_long":       n_long_log,
-        "n_short":      n_short_log,
+        "n_stocks":     n_stocks_log,
+        "last_weights": last_weights,
+        "last_date":    dates_used[-1] if dates_used else None,
     }
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  Lancement de toutes les combinaisons
-# ═══════════════════════════════════════════════════════════════════
-
-def run_all_strategies(
-    prices: pd.DataFrame,
-    returns: pd.DataFrame,
-    df_long: pd.DataFrame,
-    signals: list,
-    alloc_methods: list,
-    stoploss_types: list | None = None,
-    verbose: bool = False,
-) -> dict:
-    """
-    Exécute run_backtest pour chaque combinaison
-    signal × allocation × stop-loss.
-
-    Returns
-    -------
-    dict[ (signal, alloc, stoploss) ] → résultat du backtest
-    """
-    if stoploss_types is None:
-        stoploss_types = ["position"]
-
-    all_results = {}
-    total = len(signals) * len(alloc_methods) * len(stoploss_types)
-    count = 0
-
-    for sig in signals:
-        for alloc in alloc_methods:
-            for sl in stoploss_types:
-                count += 1
-                if verbose:
-                    print(f"  [{count}/{total}] {sig} | {alloc} | SL={sl}")
-
-                result = run_backtest(
-                    prices, returns, df_long,
-                    signal_name=sig,
-                    alloc_method=alloc,
-                    stoploss_type=sl,
-                    verbose=verbose,
-                )
-                all_results[(sig, alloc, sl)] = result
-
-    return all_results

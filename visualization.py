@@ -2,7 +2,7 @@
 visualization.py — Graphiques et export des résultats.
 
 Graphs :
-  1. Equity curve (toutes stratégies + SPX)
+  1. Equity curve (stratégie + Rf)
   2. Drawdown
   3. Rolling Sharpe (12 mois)
   4. Histogramme des rendements mensuels
@@ -37,31 +37,41 @@ COLORS = [
 
 def plot_equity_curves(all_results: dict,
                        rf_monthly: pd.Series | None = None,
-                       title: str = "Equity Curves -- L/S Market Neutral",
+                       spx_monthly: pd.Series | None = None,
+                       title: str = "Equity Curve -- Long-Only ERC (Top 25)",
                        save: bool = True):
     """
     Trace les equity curves de toutes les strategies
-    + US Treasury Bill 3M (benchmark risk-free) cumule.
+    + S&P 500 (benchmark) + US Treasury Bill 3M cumule.
     """
     fig, ax = plt.subplots(figsize=(14, 7))
 
+    first_date = list(all_results.values())[0]["cumulative"].index[0]
+
     for idx, (key, res) in enumerate(all_results.items()):
-        label = f"{key[0]} | {key[1]} | SL={key[2]}"
+        label = f"{key[0]} | {key[1]}"
         cum = res["cumulative"]
         ax.plot(cum.index, cum.values, label=label,
                 color=COLORS[idx % len(COLORS)], linewidth=1.5)
 
-    # Benchmark = Risk-free cumule (US Treasury Bill 3M)
+    # Benchmark = S&P 500 (normalise base 1)
+    if spx_monthly is not None and not spx_monthly.empty:
+        spx_filtered = spx_monthly[spx_monthly.index >= first_date]
+        if not spx_filtered.empty:
+            spx_norm = spx_filtered / spx_filtered.iloc[0]
+            ax.plot(spx_norm.index, spx_norm.values,
+                    label="S&P 500 (benchmark)", color="darkred",
+                    linewidth=1.8, linestyle="-.", alpha=0.8)
+
+    # Risk-free cumule (US Treasury Bill 3M)
     if rf_monthly is not None and not rf_monthly.empty:
         rf_cum = (1 + rf_monthly).cumprod()
-        # Normaliser a 1 au debut de la periode des strategies
-        first_date = list(all_results.values())[0]["cumulative"].index[0]
         rf_cum_filtered = rf_cum[rf_cum.index >= first_date]
         if not rf_cum_filtered.empty:
             rf_cum_filtered = rf_cum_filtered / rf_cum_filtered.iloc[0]
             ax.plot(rf_cum_filtered.index, rf_cum_filtered.values,
-                    label="US T-Bill 3M (Rf benchmark)", color="black",
-                    linewidth=1.8, linestyle="--", alpha=0.7)
+                    label="US T-Bill 3M (Rf)", color="black",
+                    linewidth=1.5, linestyle="--", alpha=0.5)
 
     ax.axhline(1.0, color="gray", linewidth=0.5, linestyle=":")
     ax.set_title(title, fontsize=14, fontweight="bold")
@@ -87,7 +97,7 @@ def plot_drawdowns(all_results: dict,
     fig, ax = plt.subplots(figsize=(14, 5))
 
     for idx, (key, res) in enumerate(all_results.items()):
-        label = f"{key[0]} | {key[1]} | SL={key[2]}"
+        label = f"{key[0]} | {key[1]}"
         cum = res["cumulative"]
         peak = cum.cummax()
         dd = (cum - peak) / peak
@@ -120,7 +130,7 @@ def plot_rolling_sharpe(all_results: dict,
     fig, ax = plt.subplots(figsize=(14, 5))
 
     for idx, (key, res) in enumerate(all_results.items()):
-        label = f"{key[0]} | {key[1]} | SL={key[2]}"
+        label = f"{key[0]} | {key[1]}"
         pnl = res["pnl"]
         rolling_mean = pnl.rolling(window).mean() * 12
         rolling_std  = pnl.rolling(window).std() * np.sqrt(12)
@@ -236,7 +246,7 @@ def plot_monthly_heatmaps(all_results: dict, save: bool = True):
                             fontsize=7,
                             color="black" if abs(val) < vmax * 0.6 else "white")
 
-        label = f"{key[0]} | {key[1]} | SL={key[2]}"
+        label = f"{key[0]} | {key[1]}"
         ax.set_title(label, fontsize=10, fontweight="bold")
         plt.colorbar(im, ax=ax, format="%.0%%", shrink=0.8)
 
@@ -254,31 +264,26 @@ def plot_monthly_heatmaps(all_results: dict, save: bool = True):
 # ═══════════════════════════════════════════════════════════════════
 
 def plot_turnover(all_results: dict, save: bool = True):
-    """Bar chart du turnover mensuel moyen par strategie."""
-    labels, turnovers, colors_list = [], [], []
-    cmap = plt.cm.Set2
+    """Time series du turnover mensuel + moyenne."""
+    fig, ax = plt.subplots(figsize=(14, 5))
 
     for idx, (key, res) in enumerate(all_results.items()):
-        labels.append(f"{key[0]}\n{key[1]}")
-        turnovers.append(res["turnover_log"].mean())
-        colors_list.append(cmap(idx / max(1, len(all_results) - 1)))
+        label = f"{key[0]} | {key[1]}"
+        to = res["turnover_log"]
+        to.index = pd.to_datetime(to.index)
+        avg = to.mean()
 
-    fig, ax = plt.subplots(figsize=(12, 5))
-    bars = ax.bar(range(len(labels)), turnovers,
-                  color=colors_list, edgecolor="grey", width=0.6)
+        ax.bar(to.index, to.values, width=25, alpha=0.6,
+               color=COLORS[idx % len(COLORS)], label=label)
+        ax.axhline(avg, color=COLORS[idx % len(COLORS)],
+                   linewidth=1.5, linestyle="--",
+                   label=f"Moyenne = {avg:.1%}")
 
-    for bar, val in zip(bars, turnovers):
-        ax.text(bar.get_x() + bar.get_width() / 2,
-                bar.get_height() + 0.005,
-                f"{val:.1%}", ha="center", va="bottom",
-                fontsize=9, fontweight="bold")
-
-    ax.set_xticks(range(len(labels)))
-    ax.set_xticklabels(labels, fontsize=8)
-    ax.set_ylabel("Turnover mensuel moyen")
+    ax.set_title("Turnover Mensuel", fontsize=14, fontweight="bold")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Turnover")
     ax.yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
-    ax.set_title("Turnover Mensuel Moyen par Strategie",
-                 fontsize=14, fontweight="bold")
+    ax.legend(fontsize=8, loc="upper right")
     ax.grid(True, axis="y", alpha=0.3)
     fig.tight_layout()
     if save:
@@ -487,20 +492,18 @@ def plot_exposure(all_results: dict, save: bool = True):
         ax = axes[idx // cols, idx % cols]
         res = all_results[key]
 
-        n_long = res["n_long"]
-        n_short = res["n_short"]
-        net = n_long - n_short
+        if "n_stocks" in res:
+            n_stocks = res["n_stocks"]
+        elif "n_long" in res:
+            n_stocks = res["n_long"]
+        else:
+            continue
 
-        ax.bar(range(len(n_long)), n_long.values, color="green",
-               alpha=0.6, label="Long", width=0.8)
-        ax.bar(range(len(n_short)), -n_short.values, color="red",
-               alpha=0.6, label="Short", width=0.8)
-        ax.plot(range(len(net)), net.values, color="blue",
-                linewidth=1.5, label="Net")
-        ax.axhline(0, color="black", linewidth=0.5)
+        ax.bar(range(len(n_stocks)), n_stocks.values, color="#1f77b4",
+               alpha=0.7, label="Titres en portefeuille", width=0.8)
 
         # X labels (annees seulement)
-        dates = pd.to_datetime(n_long.index)
+        dates = pd.to_datetime(n_stocks.index)
         year_labels = [d.strftime("%Y") if d.month == 1 else ""
                        for d in dates]
         ax.set_xticks(range(len(dates)))
@@ -508,13 +511,13 @@ def plot_exposure(all_results: dict, save: bool = True):
 
         ax.set_title(f"{key[0]} | {key[1]}", fontsize=9, fontweight="bold")
         ax.legend(fontsize=7, loc="upper right")
-        ax.set_ylabel("Nb actions")
+        ax.set_ylabel("Nb titres")
         ax.grid(True, axis="y", alpha=0.3)
 
     for idx in range(n, rows * cols):
         axes[idx // cols, idx % cols].set_visible(False)
 
-    fig.suptitle("Exposure : Nombre d'actions Long / Short par mois",
+    fig.suptitle("Nombre de titres en portefeuille par mois",
                  fontsize=14, fontweight="bold")
     fig.tight_layout()
     if save:
@@ -587,7 +590,7 @@ def plot_underwater(all_results: dict, save: bool = True):
                 arrowprops=dict(arrowstyle="->", color="darkred", lw=0.8),
             )
 
-        ax.set_title(f"{key[0]} | {key[1]} | SL={key[2]}",
+        ax.set_title(f"{key[0]} | {key[1]}",
                      fontsize=9, fontweight="bold")
         ax.yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
         ax.set_ylabel("Drawdown")

@@ -1,5 +1,5 @@
 """
-config.py — Paramètres globaux du backtest L/S market-neutral
+config.py — Paramètres globaux du backtest Long-Only ERC — S&P 500
 """
 from pathlib import Path
 
@@ -15,16 +15,22 @@ END_DATE   = "2025-12-31"
 # ──────────────────────────── Univers ────────────────────────────
 MIN_HISTORY_MONTHS = 12     # nb mois d'historique requis pour un ticker
 
-# ──────────────────────────── Signaux ────────────────────────────
-SIGNALS = ["momentum", "mean_reversion", "vol_spread"]
-QUANTILE_LONG  = 0.20       # top 20 % → long
-QUANTILE_SHORT = 0.20       # bottom 20 % → short
+# ──────────────────────────── Sélection ──────────────────────────
+N_STOCKS = 25               # nombre de titres à sélectionner
+BUFFER_RANK = 40            # un titre existant n'est remplacé que s'il sort du top 40
+# ──────────────────────────── Signaux (score composite) ──────────
+# Poids de chaque facteur dans le score composite
+SIGNAL_WEIGHTS = {
+    "momentum":       0.35,   # momentum 12M-1M
+    "mean_reversion": 0.25,   # vol mean reversion
+    "vol_spread":     0.40,   # low volatility
+}
 
 # ──────────────────────────── Allocation ─────────────────────────
-ALLOCATION_METHODS = ["equal_weight", "erc"]
+ALLOCATION_METHOD = "erc"    # Equal Risk Contribution uniquement
 
 # ──────────────────────────── Coûts ──────────────────────────────
-TRANSACTION_COST_BPS = 10   # 10 bps par transaction
+TRANSACTION_COST_BPS = 5    # 5 bps par transaction
 
 # ──────────────────────────── Stop-loss ──────────────────────────
 STOPLOSS_POSITION    = -0.10   # -10 % depuis entrée
@@ -37,6 +43,4 @@ STOPLOSS_VOL_MULT    = 2.0    # multiplicateur vol
 REBAL_FREQ = "M"            # mensuel (fin de mois)
 
 # ──────────────────────────── Risk-free ──────────────────────────
-# RF_ANNUAL n'est plus utilise : le taux sans risque est charge
-# dynamiquement depuis la feuille TAUX_SANS_RISQUE (US Treasury Bill 3M)
 RF_ANNUAL = 0.0             # fallback si la feuille Excel n'est pas disponible

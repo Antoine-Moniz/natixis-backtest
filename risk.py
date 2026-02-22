@@ -1,5 +1,5 @@
 """
-risk.py — 4 variantes de stop-loss / règles de risk management.
+risk.py — Stop-loss / règles de risk management (Long-Only).
 
 Stop-loss :
   1. Position absolue     : clôture si perte > X % depuis entrée
@@ -51,9 +51,6 @@ def stoploss_position(
         # Long : on ferme si le prix a trop baissé
         if weights[t] > 0 and pnl_pct < threshold:
             new_w[t] = 0.0
-        # Short : on ferme si le prix a trop monté (perte pour le short)
-        elif weights[t] < 0 and (-pnl_pct) < threshold:
-            new_w[t] = 0.0
 
     return new_w
 
@@ -86,11 +83,6 @@ def stoploss_trailing(
         if weights[t] > 0:
             # Long : drawdown depuis le peak
             dd = (current_prices[t] / peak_prices[t]) - 1
-            if dd < threshold:
-                new_w[t] = 0.0
-        else:
-            # Short : le "peak" est le prix le plus bas (favorable au short)
-            dd = (peak_prices[t] / current_prices[t]) - 1
             if dd < threshold:
                 new_w[t] = 0.0
 

@@ -1,0 +1,164 @@
+Parfait — avec tes notes, on peut reconstituer un sujet “officiel” + une infra de backtest propre, exactement comme ta prof l’attend (modules séparés, univers, signaux, allocation, coûts, stops, indicateurs, visus).
+Je te propose ci-dessous :
+1. Le “sujet de projet” reformulé (ce que vous devez livrer)
+2. L’architecture des fichiers (.py) + interfaces attendues
+3. Les conventions de data (format DataFrame)
+4. Le déroulé du backtest (rebalancing, coûts, stop-loss, PnL)
+5. Les indicateurs + benchmarks
+6. Bonus : sortie Excel “1 page par field” (comme BDH VBA)
+
+1) Sujet (reconstruit à partir de tes notes)
+Objectif : Construire une infrastructure de backtest basée sur Bloomberg API (Python) pour tester 3 stratégies Long/Short market-neutral sur 1 univers actions (equity only), en intégrant :
+* 2 types de data
+o Prix (BDH)
+o Données fondamentales / ratios (BDP) ou composition d’indice (bulk) selon la stratégie
+* 3 signaux (exemples typiques)
+o Momentum : perf (12m – 1m)
+o Value : low P/E long, high P/E short
+o (3e au choix : low vol, quality, reversal court terme, etc.)
+* 4 allocations / risk budgeting (mais pour le projet : Equal Weight + ERC minimum)
+* 4 stop-loss / règles de risk management
+* Coûts de transaction : 10 bps par transaction
+* 5 indicateurs mini : Sharpe, Max Drawdown, Vol, Returns, Track/Equity curve (+ éventuellement VaR/CVaR/Sortino)
+* Benchmarks : jusqu’à 5 (mais en L/S c’est délicat ? benchmark “risk-free” ou “0” + éventuellement SPX à titre informatif)
+Contraintes clés prof :
+* Market-neutral : $ long = $ short (au début “c’est du PnL”, pas du beta).
+* Univers pas trop petit pas énorme (liquidité/manque de data). Idées : S&P 500 
+2) Architecture de code (modules attendus)
+Voilà une architecture qui colle exactement à ce que ta prof décrit :
+project/
+  main.py
+  bloomberg.py
+  universe.py
+  signal.py
+  allocation.py
+  risk.py
+  backtest.py
+  costs.py
+  metrics.py
+  visualization.py
+  config.py
+  outputs/
+  data_cache/
+
+Rôle de chaque module
+config.py
+* Paramètres globaux : dates, fréquence rebal (mensuel), coûts (10 bps), quantiles (ex: 20/20), stop-loss choisi, univers choisi.
+bloomberg.py
+* Wrapper Bloomberg (réparer/cleaner votre BLP class).
+* Fonctions :
+o bdh(tickers, fields, start, end, ...) -> dict[field] = DataFrame(date x ticker)
+o bdp(tickers, fields, overrides=...) -> DataFrame(ticker x field)
+o get_index_members(index_ticker, date) -> list[tickers] (composition indice equity only)
+universe.py
+* Construit l’univers final (ex : S&P 500 membres à une date, puis filtre data dispo/NaN, éventuellement filtre liquidité si volume dispo).
+signal.py
+* Calcule signaux cross-section.
+* Ex :
+o momentum_12m1m(prices) -> Series(ticker -> score)
+o value_pe(pe) -> Series(score)
+o make_long_short_buckets(signal, q=0.2) -> (long_list, short_list)
+allocation.py
+* Transforme une liste long/short + signal en poids.
+* Minimum projet :
+o equal_weight(long, short) -> weights
+o erc_weights(returns_cov, long, short) -> weights (Equal Risk Contribution)
+* Contrainte : somme(weights_long)=+1, somme(weights_short)=-1.
+risk.py
+* Stop-loss / risk rules (4 variantes).
+* Exemple (4 styles classiques) :
+1. Stop-loss par position (ex: -10% depuis entrée)
+2. Stop-loss trailing par position
+3. Stop-loss sur portefeuille (drawdown max)
+4. Stop-loss volatility / VaR-based (réduction d’exposition)
+costs.py
+* Coûts : cost = 10 bps * turnover
+* Turnover = somme(|w_t - w_{t-1}|) / 2 (ou autre convention, mais soyez cohérents)
+backtest.py
+* Le moteur :
+o boucle dates de rebal
+o calc signaux
+o calc poids
+o applique stop-loss
+o calc PnL et track
+o log toutes les décisions (important “fiabilité”)
+metrics.py
+* Sharpe (avec rf : ESTER ou proxy), Sortino, Vol, Max Drawdown, VaR/CVaR histo, returns cumulés, etc.
+visualization.py
+* Graphs comparables : equity curve, drawdown, rolling sharpe, hist returns.
+* Export des tables de perf.
+
+3) Convention de données (très important pour éviter le chaos)
+Ta prof veut “une page par field”, “colonnes tickers”, “lignes dates”.
+?? Standard : pour chaque field, un DataFrame :
+* index = dates
+* colonnes = tickers
+* valeurs = field (PX_LAST, PX_VOLUME, etc.)
+En Python :
+data = { "PX_LAST": df_prices, "PX_VOLUME": df_volume, ... }
+Ça vous permet :
+* signal momentum = calcul sur data["PX_LAST"]
+* filtres liquidité = data["PX_VOLUME"]
+* export Excel = 1 sheet par field (exactement la consigne)
+
+4) Déroulé “propre” du backtest (ce que la prof attend)
+A) Calendrier
+* fréquence : mensuelle (souvent fin de mois ou 1er jour ouvré)
+* à chaque date de rebal t :
+1. Univers (membres indice au temps t)
+2. Features/signal calculés avec données jusqu’à t (pas de look-ahead)
+3. Construction quantiles : top X% = long, bottom X% = short
+4. Allocation (EW ou ERC) en market neutral
+5. Application stop-loss / règles RM
+6. Trading ? turnover ? coûts
+7. PnL réalisé jusqu’au prochain rebal
+B) PnL (L/S)
+Si vous êtes en poids (exposition), le retour journalier :
+r_(ptf,t)=?_i?w_(i,t-1)  "?" r_(i,t) "??"-"??" ?"costs" ?_t
+
+avec ?w^+=1et ?w^-=-1.
+C) Points de “fiabilité” (la prof insiste)
+* Survivorship bias (composition d’indice : idéalement “as of date”)
+* Look-ahead (ne pas utiliser data future)
+* Data holes (NaN) ? règles claires (drop, forward-fill interdit sur fondamentaux, etc.)
+* Rebalancing : poids doivent “drifter” entre deux rebals si vous simulez mark-to-market (recommandé)
+
+5) Indicateurs + benchmark (adapté au L/S)
+Minimum 5 indicateurs (cohérents avec tes notes)
+* Track / Equity curve (c’est le livrable #1)
+* Sharpe (avec rf : ESTER si vous l’avez, sinon rf=0 en justifiant)
+* Max Drawdown
+* Volatilité
+* Return total / CAGR
+Optionnels (mais très “finance”) :
+* Sortino
+* VaR/CVaR historique
+* Turnover moyen + coûts cumulés
+Benchmarks (problème L/S)
+* En L/S market neutral, comparer à SPX est “biaisé” (pas le même beta).
+* Solutions propres :
+o Benchmark principal : cash / rf (0 ou ESTER)
+o Et vous affichez SPX en annexe “pour contexte”.
+
+6) Sortie Excel “1 page par field” (comme BDH VBA)
+Même si vous codez tout en Python, vous pouvez exporter :
+* PX_LAST ? Sheet “PX_LAST”
+* PX_VOLUME ? Sheet “PX_VOLUME”
+* etc.
+Format : lignes dates / colonnes tickers = exactement BDH Excel.
+
+
+Ce que je te conseille comme “plan de rendu” (simple et noté)
+1. bloomberg.py stable : BDH + index members
+2. signal.py : momentum 12m-1m + value PE + 1 signal bonus
+3. allocation.py : EW + ERC market-neutral
+4. backtest.py : moteur + coûts 10 bps + 4 stop-loss
+5. metrics.py + visualization.py : tables + graphs comparables
+6. Export Excel “1 sheet par field” + résultats
+
+Top of Form
+
+Bottom of Form
+
+
+

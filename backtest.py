@@ -96,6 +96,8 @@ def run_backtest(
     cumul_list    = []
     turnover_list = []
     cost_list     = []
+    n_long_list   = []
+    n_short_list  = []
     dates_used    = []
 
     nav          = 1.0
@@ -197,6 +199,8 @@ def run_backtest(
         cumul_list.append(nav)
         turnover_list.append(to)
         cost_list.append(cost)
+        n_long_list.append(len(long_list))
+        n_short_list.append(len(short_list))
         dates_used.append(date)
 
         port_rets_so_far = pd.Series(pnl_list, index=dates_used)
@@ -208,11 +212,16 @@ def run_backtest(
     turnover_log = pd.Series(turnover_list,  index=dates_used, name="turnover")
     cost_log     = pd.Series(cost_list,      index=dates_used, name="cost")
 
+    n_long_log   = pd.Series(n_long_list,   index=dates_used, name="n_long")
+    n_short_log  = pd.Series(n_short_list,  index=dates_used, name="n_short")
+
     return {
         "pnl":          pnl,
         "cumulative":   cumulative,
         "turnover_log": turnover_log,
         "cost_log":     cost_log,
+        "n_long":       n_long_log,
+        "n_short":      n_short_log,
     }
 
 

@@ -18,6 +18,9 @@ from metrics import summary_table, compute_all_metrics, set_rf_series
 from visualization import (
     plot_equity_curves, plot_drawdowns, plot_rolling_sharpe,
     plot_return_histograms, display_metrics_table, export_all_results,
+    plot_monthly_heatmaps, plot_turnover, plot_correlation_matrix,
+    plot_annual_returns, plot_long_short_contribution,
+    plot_qq, plot_exposure, plot_underwater,
 )
 from config import SIGNALS, ALLOCATION_METHODS, START_DATE, END_DATE
 
@@ -79,6 +82,21 @@ def main():
     plot_drawdowns(all_results)
     plot_rolling_sharpe(all_results)
     plot_return_histograms(all_results)
+
+    # Nouveaux graphiques
+    plot_monthly_heatmaps(all_results)
+    plot_turnover(all_results)
+    plot_correlation_matrix(all_results)
+    plot_annual_returns(all_results)
+    plot_long_short_contribution(all_results)
+
+    # Graphiques avances
+    spx_m = data["spx_monthly"]
+    spx_ret = spx_m.pct_change().dropna()
+    plot_qq(all_results)
+    plot_exposure(all_results)
+    plot_underwater(all_results)
+
     export_all_results(all_results, summary_df)
 
     print("\n" + "=" * 60)

@@ -18,12 +18,6 @@ venv/
 # Data cache
 data_cache/
 
-# Excel data (trop volumineux pour GitHub)
-*.xlsx
-
-# Outputs (regeneres par main.py)
-outputs/
-
 # OS
 Thumbs.db
 .DS_Store

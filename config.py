@@ -44,3 +44,54 @@ REBAL_FREQ = "M"            # mensuel (fin de mois)
 
 # ──────────────────────────── Risk-free ──────────────────────────
 RF_ANNUAL = 0.0             # fallback si la feuille Excel n'est pas disponible
+
+# ──────────────────────────── Exclusion ESG ──────────────────────
+ESG_EXCLUSIONS = {
+    "Tabac": [
+        "MO UN Equity",       # Altria
+        "PM UN Equity",       # Philip Morris
+    ],
+    "Armes / Défense": [
+        "LMT UN Equity",      # Lockheed Martin
+        "RTX UN Equity",      # Raytheon Technologies
+        "NOC UN Equity",      # Northrop Grumman
+        "GD UN Equity",       # General Dynamics
+        "HII UN Equity",      # Huntington Ingalls Industries
+        "LHX UN Equity",      # L3Harris Technologies
+        "BA UN Equity",       # Boeing
+    ],
+    "Énergies fossiles": [
+        "XOM UN Equity",      # Exxon Mobil
+        "CVX UN Equity",      # Chevron
+        "COP UN Equity",      # ConocoPhillips
+        "EOG UN Equity",      # EOG Resources
+        "OXY UN Equity",      # Occidental Petroleum
+        "MPC UN Equity",      # Marathon Petroleum
+        "VLO UN Equity",      # Valero Energy
+        "PSX UN Equity",      # Phillips 66
+        "DVN UN Equity",      # Devon Energy
+        "HES UN Equity",      # Hess Corporation
+        "HAL UN Equity",      # Halliburton
+        "SLB UN Equity",      # Schlumberger
+        "MRO UN Equity",      # Marathon Oil
+        "CTRA UN Equity",     # Coterra Energy
+        "KMI UN Equity",      # Kinder Morgan
+        "WMB UN Equity",      # Williams Companies
+        "OKE UN Equity",      # ONEOK
+        "FCX UN Equity",      # Freeport-McMoRan
+    ],
+    "Jeux d'argent": [
+        "WYNN UW Equity",     # Wynn Resorts
+        "MGM UN Equity",      # MGM Resorts
+    ],
+    "Alcool": [
+        "BF/B UN Equity",     # Brown-Forman
+        "STZ UN Equity",      # Constellation Brands
+        "TAP UN Equity",      # Molson Coors
+    ],
+}
+
+# Set complet des tickers exclus (utilisé pour filtrer l'univers)
+ESG_EXCLUDED_TICKERS = set()
+for _cat, _tickers in ESG_EXCLUSIONS.items():
+    ESG_EXCLUDED_TICKERS.update(_tickers)

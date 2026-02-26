@@ -18,21 +18,34 @@ from config import N_STOCKS, SIGNAL_WEIGHTS, BUFFER_RANK
 #  Signaux individuels
 # ═══════════════════════════════════════════════════════════════════
 
-def momentum_12m1m(prices: pd.DataFrame, t: int) -> pd.Series:
+def momentum_12m1m(prices: pd.DataFrame, t: int, lookback: int = 11) -> pd.Series:
     """
-    Momentum 12m - 1m :  rendement sur les 12 derniers mois,
-    sans le dernier mois (pour éviter le reversal court terme).
+    Momentum pondéré par le temps (12M - 1M).
+
+    Décompose le rendement sur 11 mois (mois -2 à -12, skip le dernier mois)
+    en rendements mensuels individuels, puis les pondère linéairement :
+    les mois récents pèsent plus que les mois anciens.
+
+    Avantages vs momentum classique :
+      - Meilleur Sharpe et Sortino (ajustement risque)
+      - Volatilité plus faible, drawdown réduit
+      - Hit ratio supérieur
     """
-    if t < 12:
+    if t < lookback + 1:
         return pd.Series(dtype=float)
 
-    p_now   = prices.iloc[t]
-    p_1m    = prices.iloc[t - 1]
-    p_12m   = prices.iloc[t - 12]
+    # Rendements mensuels de t-lookback-1 à t-1 (on skip le mois t)
+    sub = prices.iloc[t - lookback - 1:t]  # lookback+1 prix → lookback rendements
+    rets = sub.pct_change().iloc[1:]        # lookback rendements (ancien → récent)
 
-    ret_12m = p_now / p_12m - 1
-    ret_1m  = p_now / p_1m - 1
-    signal = ret_12m - ret_1m
+    n = len(rets)
+    # Poids linéaires croissants : 1, 2, 3, ..., n (récent pèse plus)
+    raw_weights = np.arange(1, n + 1, dtype=float)
+    raw_weights = raw_weights / raw_weights.sum()
+
+    # Rendement pondéré = somme(w_k * r_k)
+    signal = (rets.values * raw_weights[:, np.newaxis]).sum(axis=0)
+    signal = pd.Series(signal, index=rets.columns)
 
     return signal.dropna()
 
@@ -103,6 +116,9 @@ def compute_signal(signal_name: str, prices: pd.DataFrame, t: int) -> pd.Series:
 
 def _zscore(s: pd.Series) -> pd.Series:
     """Standardise une Series en z-score."""
+    s = pd.to_numeric(s, errors="coerce").dropna()
+    if s.empty:
+        return s
     mu = s.mean()
     sigma = s.std()
     if sigma == 0 or np.isnan(sigma):

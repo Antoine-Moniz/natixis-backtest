@@ -330,23 +330,47 @@ def select_hybrid_portfolio(prices: pd.DataFrame, fundamentals: dict, t: int,
                            members: list = None, n_composite: int = 15, n_value_size: int = 5) -> list:
     """
     Sélection hybride : 70% composite (15 actions) + 30% value/size (5 actions).
+    Si les données fondamentales sont indisponibles, fallback sur stratégie composite pure.
     """
+    total_target = n_composite + n_value_size
+    
     # Sélection composite (momentum dominant)
     composite_selected = select_top_n(prices, t, members=members, n=n_composite)
     
-    # Sélection value/size
+    # Vérifier si la sélection composite a fonctionné
+    if not composite_selected or len(composite_selected) == 0:
+        print(f"    [!] Echec selection composite a t={t}")
+        return []
+    
+    # Tentative de sélection value/size
     value_size_score = compute_value_size_score(fundamentals, t, members=members)
-    value_size_selected = value_size_score.head(n_value_size).index.tolist()
+    
+    # Si pas de données fondamentales, fallback sur composite étendu
+    if value_size_score.empty or len(value_size_score) == 0:
+        print(f"    [!] Donnees VALUE/SIZE indisponibles -> fallback composite ({total_target} actions)")
+        fallback_selected = select_top_n(prices, t, members=members, n=total_target)
+        if fallback_selected and len(fallback_selected) > 0:
+            print(f"    [OK] Fallback successful: {len(fallback_selected)} actions")
+            return fallback_selected
+        else:
+            print(f"    [!] Fallback failed, using original composite selection")
+            return composite_selected
+    
+    value_size_selected = value_size_score.head(n_value_size * 2).index.tolist()  # Plus de candidats
     
     # Éviter les doublons
     value_size_final = [ticker for ticker in value_size_selected 
                        if ticker not in composite_selected]
     
-    # Si pas assez de titres value/size uniques, compléter avec composite
+    # Si pas assez de titres value/size uniques, compléter avec composite étendu
     if len(value_size_final) < n_value_size:
         needed = n_value_size - len(value_size_final)
-        extra_composite = [ticker for ticker in value_size_score.index 
+        composite_score = compute_composite_score(prices, t, members=members)
+        extra_composite = [ticker for ticker in composite_score.index 
                           if ticker not in composite_selected and ticker not in value_size_final]
         value_size_final.extend(extra_composite[:needed])
     
-    return composite_selected + value_size_final[:n_value_size]
+    final_selection = composite_selected + value_size_final[:n_value_size]
+    print(f"    [OK] Selection hybride: {len(composite_selected)} COMPOSITE + {len(value_size_final[:n_value_size])} VALUE/SIZE = {len(final_selection)} total")
+    
+    return final_selection

@@ -29,7 +29,7 @@ from config import START_DATE, END_DATE, N_STOCKS, OUTPUT_DIR, ESG_EXCLUSIONS, E
 
 
 def print_current_portfolio(result: dict):
-    """Affiche les titres (20 hybride) et leurs poids pour la dernière période."""
+    """Affiche les 20 titres hybrides et leurs poids pour la dernière période."""
     last_w = result["last_weights"]
     last_date = result["last_date"]
 

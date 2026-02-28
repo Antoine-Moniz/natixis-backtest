@@ -16,8 +16,8 @@ END_DATE   = "2025-12-31"
 MIN_HISTORY_MONTHS = 12     # nb mois d'historique requis pour un ticker
 
 # ──────────────────────────── Sélection ──────────────────────────
-N_STOCKS = 10               # nombre de titres à sélectionner (focus extreme)
-BUFFER_RANK = 15            # un titre existant n'est remplacé que s'il sort du top 15
+N_STOCKS = 20               # nombre de titres pour stratégie hybride (5 VALUE/SIZE + 15 COMPOSITE)
+BUFFER_RANK = 25            # un titre existant n'est remplacé que s'il sort du top 25
 # ──────────────────────────── Signaux (score composite) ──────────
 # Poids de chaque facteur dans le score composite (momentum pur)
 SIGNAL_WEIGHTS = {

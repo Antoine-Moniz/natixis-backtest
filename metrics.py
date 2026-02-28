@@ -28,7 +28,7 @@ def get_rf_annual_mean() -> float:
     """Moyenne annualisee du taux sans risque sur la periode."""
     if _RF_MONTHLY.empty:
         return 0.02          # fallback 2 %
-    return _RF_MONTHLY.mean() * 12.0   # deja en taux mensuel
+    return _RF_MONTHLY.mean()   # deja en taux annualise dans data_loader
 
 
 # ═══════════════════════════════════════════════════════════════════

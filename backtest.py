@@ -8,7 +8,7 @@ et renvoie les PnL, equity curve, turnover, coûts et les poids de la dernière 
 import pandas as pd
 import numpy as np
 
-from config import START_DATE, END_DATE, N_STOCKS
+from config import START_DATE, END_DATE, N_STOCKS, REBAL_FREQ
 from signals import select_top_n
 from allocation import allocate
 from costs import compute_turnover, compute_cost
@@ -83,10 +83,24 @@ def run_backtest(
     dict avec clés : pnl, cumulative, turnover_log, cost_log, n_stocks,
                      last_weights, last_date
     """
-    # ── Dates de rebalancement dans la fenêtre ──
+    # ── Dates de rebalancement dans la fenêtre selon REBAL_FREQ ──
     mask = (prices.index >= pd.Timestamp(START_DATE)) & \
            (prices.index <= pd.Timestamp(END_DATE))
-    rebal_dates = prices.index[mask].tolist()
+    all_dates = prices.index[mask]
+    
+    # Appliquer la fréquence de rebalancement configurée
+    if REBAL_FREQ == "M":  # Mensuel
+        rebal_dates = all_dates.tolist()
+    elif REBAL_FREQ == "Q":  # Trimestriel (fin de trimestre)
+        # Prendre le dernier jour de chaque trimestre
+        quarterly_ends = all_dates.to_period('Q').drop_duplicates(keep='last')
+        rebal_dates = [all_dates[all_dates.to_period('Q') == qtr][-1] for qtr in quarterly_ends]
+    elif REBAL_FREQ == "A":  # Annuel
+        yearly_ends = all_dates.to_period('Y').drop_duplicates(keep='last')
+        rebal_dates = [all_dates[all_dates.to_period('Y') == yr][-1] for yr in yearly_ends]
+    else:
+        # Fallback sur mensuel
+        rebal_dates = all_dates.tolist()
 
     # ── Listes de résultats ──
     pnl_list      = []
@@ -95,6 +109,7 @@ def run_backtest(
     cost_list     = []
     n_stocks_list = []
     dates_used    = []
+    weight_history = []  # Historique des poids pour analyse sectorielle
 
     nav          = 1.0
     nav_peak     = 1.0
@@ -193,6 +208,7 @@ def run_backtest(
         cost_list.append(cost)
         n_stocks_list.append(len(stock_list))
         dates_used.append(date)
+        weight_history.append(weights.copy())  # Sauvegarder les poids
 
         port_rets_so_far = pd.Series(pnl_list, index=dates_used)
         prev_weights = weights.copy()
@@ -214,11 +230,13 @@ def run_backtest(
     n_stocks_log = pd.Series(n_stocks_list,  index=dates_used, name="n_stocks")
 
     return {
-        "pnl":          pnl,
-        "cumulative":   cumulative,
-        "turnover_log": turnover_log,
-        "cost_log":     cost_log,
-        "n_stocks":     n_stocks_log,
-        "last_weights": last_weights,
-        "last_date":    dates_used[-1] if dates_used else None,
+        "pnl":            pnl,
+        "cumulative":     cumulative,
+        "turnover_log":   turnover_log,
+        "cost_log":       cost_log,
+        "n_stocks":       n_stocks_log,
+        "last_weights":   last_weights,
+        "last_date":      dates_used[-1] if dates_used else None,
+        "weight_history": weight_history,
+        "dates_history":  dates_used,
     }

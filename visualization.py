@@ -37,12 +37,13 @@ COLORS = [
 
 def plot_equity_curves(all_results: dict,
                        rf_monthly: pd.Series | None = None,
+                       sofr_plus_4_m: pd.Series | None = None,
                        spx_monthly: pd.Series | None = None,
                        title: str = "Equity Curve -- Long-Only ERC (Top 25)",
                        save: bool = True):
     """
     Trace les equity curves de toutes les strategies
-    + S&P 500 (benchmark) + US Treasury Bill 3M cumule.
+    + S&P 500 (benchmark) + SOFR + 4% cumule.
     """
     fig, ax = plt.subplots(figsize=(14, 7))
 
@@ -63,15 +64,15 @@ def plot_equity_curves(all_results: dict,
                     label="S&P 500 (benchmark)", color="darkred",
                     linewidth=1.8, linestyle="-.", alpha=0.8)
 
-    # Risk-free cumule (US Treasury Bill 3M)
-    if rf_monthly is not None and not rf_monthly.empty:
-        rf_cum = (1 + rf_monthly).cumprod()
-        rf_cum_filtered = rf_cum[rf_cum.index >= first_date]
-        if not rf_cum_filtered.empty:
-            rf_cum_filtered = rf_cum_filtered / rf_cum_filtered.iloc[0]
-            ax.plot(rf_cum_filtered.index, rf_cum_filtered.values,
-                    label="US T-Bill 3M (Rf)", color="black",
-                    linewidth=1.5, linestyle="--", alpha=0.5)
+    # SOFR + 4% cumule (nouveau benchmark)
+    if sofr_plus_4_m is not None and not sofr_plus_4_m.empty:
+        sofr_cum = (1 + sofr_plus_4_m).cumprod()
+        sofr_cum_filtered = sofr_cum[sofr_cum.index >= first_date]
+        if not sofr_cum_filtered.empty:
+            sofr_cum_filtered = sofr_cum_filtered / sofr_cum_filtered.iloc[0]
+            ax.plot(sofr_cum_filtered.index, sofr_cum_filtered.values,
+                    label="SOFR + 4%", color="orange",
+                    linewidth=1.5, linestyle="--", alpha=0.7)
 
     ax.axhline(1.0, color="gray", linewidth=0.5, linestyle=":")
     ax.set_title(title, fontsize=14, fontweight="bold")
@@ -607,6 +608,230 @@ def plot_underwater(all_results: dict, save: bool = True):
         fig.savefig(OUTPUT_DIR / "underwater.png",
                     dpi=150, bbox_inches="tight")
     plt.close(fig)
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  Analyse sectorielle
+# ═══════════════════════════════════════════════════════════════════
+
+def _clean_ticker_for_sector_mapping(ticker_full: str) -> str:
+    """
+    Nettoie un ticker pour le matching avec la feuille secteur.
+    Essaye plusieurs formats pour maximiser les matches.
+    """
+    # Nettoyer les suffixes Bloomberg courants
+    ticker_clean = ticker_full.replace(' UN Equity', '').replace(' UW Equity', '').replace(' US Equity', '')
+    ticker_clean = ticker_clean.replace(' Equity', '').replace('.', '')
+    return ticker_clean.strip()
+
+
+def _map_tickers_to_sectors(portfolio_df: pd.DataFrame, df_sectors: pd.DataFrame) -> pd.DataFrame:
+    """
+    Mapping robuste tickers -> secteurs.
+    Dans SPX_Sector, les tickers sont au format complet (ex: "AAPL UW Equity").
+    """
+    # Tentative 1: mapping direct avec ticker complet
+    result = portfolio_df.merge(
+        df_sectors.rename(columns={'ticker': 'ticker_full'}), 
+        on='ticker_full', how='left'
+    )
+    
+    # Si pas de match, essayer avec nettoyage des deux côtés
+    unmapped = result[result['sector'].isna()].copy()
+    if not unmapped.empty:
+        # Créer mapping avec tickers nettoyés
+        df_sectors_clean = df_sectors.copy()
+        df_sectors_clean['ticker_clean'] = df_sectors_clean['ticker'].str.replace(
+            r' U[NW] Equity| US Equity| Equity', '', regex=True
+        ).str.replace('.', '', regex=False)
+        
+        unmapped['ticker_clean'] = unmapped['ticker'].str.replace(
+            r' U[NW] Equity| US Equity| Equity', '', regex=True
+        ).str.replace('.', '', regex=False)
+        
+        # Merger sur tickers nettoyés
+        clean_mapping = unmapped[['ticker_full', 'weight', 'ticker_clean']].merge(
+            df_sectors_clean[['ticker_clean', 'sector']], 
+            on='ticker_clean', how='left'
+        )
+        
+        # Mettre à jour les secteurs manquants
+        for idx in unmapped.index:
+            ticker_clean = unmapped.loc[idx, 'ticker_clean']
+            sector_match = df_sectors_clean[df_sectors_clean['ticker_clean'] == ticker_clean]
+            if not sector_match.empty:
+                result.loc[idx, 'sector'] = sector_match.iloc[0]['sector']
+    
+    return result
+
+
+def plot_current_portfolio_sectors(result: dict, df_sectors: pd.DataFrame,
+                                   title: str = "Répartition Sectorielle - Portefeuille Actuel",
+                                   save: bool = True):
+    """
+    Graphique en camembert de la répartition sectorielle du portefeuille actuel.
+    """
+    last_weights = result["last_weights"]
+    if last_weights.empty:
+        print("  [!] Pas de portefeuille à analyser")
+        return
+
+    # Joindre avec les secteurs (mapping direct - pas de nettoyage)
+    portfolio_df = pd.DataFrame({
+        'ticker': [_clean_ticker_for_sector_mapping(t) for t in last_weights.index],  # Keep for backward compat
+        'weight': last_weights.values,
+        'ticker_full': last_weights.index  # Utiliser le format complet pour mapping
+    })
+    
+    # Utiliser le mapping robuste
+    portfolio_df = _map_tickers_to_sectors(portfolio_df, df_sectors)
+    
+    # Remplacer les secteurs manquants
+    portfolio_df['sector'] = portfolio_df['sector'].fillna('Unknown')
+    
+    # Agrégation par secteur
+    sector_weights = portfolio_df.groupby('sector')['weight'].sum().sort_values(ascending=False)
+    
+    # Graphique en camembert
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+    
+    # Camembert
+    colors = plt.cm.Set3(np.linspace(0, 1, len(sector_weights)))
+    wedges, texts, autotexts = ax1.pie(
+        sector_weights.values, 
+        labels=sector_weights.index,
+        autopct='%1.1f%%',
+        startangle=90,
+        colors=colors
+    )
+    
+    ax1.set_title(title, fontsize=14, fontweight="bold")
+    
+    # Barres
+    ax2.barh(range(len(sector_weights)), sector_weights.values, color=colors)
+    ax2.set_yticks(range(len(sector_weights)))
+    ax2.set_yticklabels(sector_weights.index)
+    ax2.set_xlabel("Poids (%)")
+    ax2.set_title("Poids par Secteur", fontsize=12, fontweight="bold")
+    ax2.xaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+    
+    # Ajouter valeurs sur les barres
+    for i, v in enumerate(sector_weights.values):
+        ax2.text(v + 0.005, i, f'{v:.1%}', va='center')
+    
+    fig.tight_layout()
+    
+    if save:
+        fig.savefig(OUTPUT_DIR / "current_portfolio_sectors.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    
+    # Affichage console
+    print(f"\n{'='*50}")
+    print("  RÉPARTITION SECTORIELLE - PORTEFEUILLE ACTUEL")
+    print(f"{'='*50}")
+    for sector, weight in sector_weights.items():
+        print(f"  {sector:<25} {weight:>8.2%}")
+    
+    # Debug: vérifier le mapping
+    missing_sectors = portfolio_df[portfolio_df['sector'] == 'Unknown']
+    if not missing_sectors.empty:
+        print(f"\n  [DEBUG] Tickers sans secteur ({len(missing_sectors)}):")
+        for ticker in missing_sectors['ticker'].values[:5]:  # Afficher 5 premiers
+            print(f"    {ticker}")
+        if len(missing_sectors) > 5:
+            print(f"    ... et {len(missing_sectors)-5} autres")
+    print()
+
+
+def plot_sector_allocation_over_time(all_results: dict, df_sectors: pd.DataFrame,
+                                    title: str = "Évolution Allocation Sectorielle",
+                                    save: bool = True):
+    """
+    Graphique en aires empilées de l'évolution de la répartition sectorielle dans le temps.
+    """
+    # Prendre la première (et seule) stratégie
+    result = list(all_results.values())[0]
+    weight_history = result.get("weight_history", [])
+    dates_history = result.get("dates_history", [])
+    
+    if not weight_history or not dates_history:
+        print("  [!] Pas d'historique des poids disponible")
+        return
+    
+    # Construire DataFrame de l'historique des allocations sectorielles
+    sector_allocation_over_time = []
+    
+    for i, (date, weights) in enumerate(zip(dates_history, weight_history)):
+        # Mapper les tickers vers les secteurs (format complet)
+        portfolio_df = pd.DataFrame({
+            'ticker': [_clean_ticker_for_sector_mapping(t) for t in weights.index],  # Keep for backward compat
+            'weight': weights.values,
+            'ticker_full': weights.index  # Utiliser le format complet pour mapping
+        })
+        
+        # Utiliser le mapping robuste
+        portfolio_df = _map_tickers_to_sectors(portfolio_df, df_sectors)
+        portfolio_df['sector'] = portfolio_df['sector'].fillna('Unknown')
+        
+        # Agréger par secteur
+        sector_weights = portfolio_df.groupby('sector')['weight'].sum()
+        
+        # Ajouter à l'historique
+        row = {'date': date}
+        row.update(sector_weights.to_dict())
+        sector_allocation_over_time.append(row)
+    
+    # Convertir en DataFrame
+    df_sector_hist = pd.DataFrame(sector_allocation_over_time)
+    df_sector_hist = df_sector_hist.set_index('date').fillna(0)
+    
+    # Graphique en aires empilées
+    fig, ax = plt.subplots(figsize=(14, 8))
+    
+    # Couleurs pour chaque secteur
+    sectors = df_sector_hist.columns
+    colors = plt.cm.Set3(np.linspace(0, 1, len(sectors)))
+    
+    # Aires empilées
+    ax.stackplot(df_sector_hist.index, 
+                [df_sector_hist[sector].values for sector in sectors],
+                labels=sectors, colors=colors, alpha=0.8)
+    
+    ax.set_title(title, fontsize=14, fontweight="bold")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Allocation (%)")
+    ax.yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
+    
+    # Légende à l'extérieur
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9)
+    
+    # Grille
+    ax.grid(True, alpha=0.3)
+    
+    fig.tight_layout()
+    
+    if save:
+        fig.savefig(OUTPUT_DIR / "sector_allocation_over_time.png", 
+                   dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    
+    # Affichage console de quelques dates clés
+    print(f"\n{'='*50}")
+    print("  ÉVOLUTION SECTORIELLE (quelques dates)")
+    print(f"{'='*50}")
+    
+    # Afficher début, milieu, fin
+    key_dates = [df_sector_hist.index[0], 
+                df_sector_hist.index[len(df_sector_hist)//2],
+                df_sector_hist.index[-1]]
+    
+    for date in key_dates:
+        print(f"\n  {date.strftime('%Y-%m')}:")
+        sector_weights = df_sector_hist.loc[date].sort_values(ascending=False)
+        for sector, weight in sector_weights.items():
+            if weight > 0.01:  # Afficher seulement >1%
+                print(f"    {sector:<20} {weight:>6.1%}")
+    print()
 
 
 # ═══════════════════════════════════════════════════════════════════

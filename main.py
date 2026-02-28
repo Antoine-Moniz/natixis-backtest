@@ -23,6 +23,7 @@ from visualization import (
     plot_monthly_heatmaps, plot_turnover, plot_correlation_matrix,
     plot_annual_returns,
     plot_qq, plot_underwater,
+    plot_current_portfolio_sectors, plot_sector_allocation_over_time,
 )
 from config import START_DATE, END_DATE, N_STOCKS, OUTPUT_DIR, ESG_EXCLUSIONS, ESG_EXCLUDED_TICKERS
 
@@ -77,10 +78,11 @@ def main():
     prices     = data["prices"]
     returns    = data["returns"]
     df_long    = data["df_long"]
-    rf_m       = data["rf_monthly"]
+    rf_annual  = data["rf_annual"]
+    df_sectors = data["df_sectors"]
 
     # Initialiser le taux sans risque dans metrics
-    set_rf_series(rf_m)
+    set_rf_series(rf_annual)
 
     # ── Filtre ESG : exclusion des titres controversés ──
     n_before = prices.shape[1]
@@ -111,9 +113,9 @@ def main():
     print(f"\n  Prix     : {prices.shape[0]} dates x {prices.shape[1]} tickers")
     print(f"  Periode  : {prices.index[0].strftime('%Y-%m')} -> "
           f"{prices.index[-1].strftime('%Y-%m')}")
-    print(f"  Rf pts   : {len(rf_m)}")
-    if not rf_m.empty:
-        print(f"  Rf moyen : {rf_m.mean() * 12:.2%} annualise")
+    print(f"  Rf pts   : {len(rf_annual)}")
+    if not rf_annual.empty:
+        print(f"  Rf moyen : {rf_annual.mean():.2%} annualise")
 
     # ── 2. Lancement du backtest ──
     print("\n[2/4] Lancement du backtest Long-Only ERC (ESG)...")
@@ -136,16 +138,27 @@ def main():
     # ── Affichage du portefeuille actuel (25 titres + poids) ──
     print_current_portfolio(result)
 
+    # ── Analyse sectorielle ──
+    print("\n[3.5/4] Analyse sectorielle...")
+    plot_current_portfolio_sectors(result, df_sectors)
+    plot_sector_allocation_over_time(all_results, df_sectors)
+
     # ── 4. Graphiques + export ──
     print("\n[4/4] Graphiques et export...")
 
-    # Filtrer Rf sur la meme période
-    rf_filtered = rf_m[
-        (rf_m.index >= START_DATE) & (rf_m.index <= END_DATE)
+    # Filtrer SOFR+4% et Rf sur la même période
+    rf_filtered = rf_annual[
+        (rf_annual.index >= START_DATE) & (rf_annual.index <= END_DATE)
+    ]
+    
+    sofr_plus_4_filtered = data["sofr_plus_4_m"][
+        (data["sofr_plus_4_m"].index >= START_DATE) & 
+        (data["sofr_plus_4_m"].index <= END_DATE)
     ]
 
     spx_m = data["spx_monthly"]
-    plot_equity_curves(all_results, rf_monthly=rf_filtered, spx_monthly=spx_m)
+    plot_equity_curves(all_results, rf_monthly=rf_filtered, 
+                       sofr_plus_4_m=sofr_plus_4_filtered, spx_monthly=spx_m)
     plot_drawdowns(all_results)
     plot_rolling_sharpe(all_results)
     plot_return_histograms(all_results)

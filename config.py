@@ -16,21 +16,21 @@ END_DATE   = "2025-12-31"
 MIN_HISTORY_MONTHS = 12     # nb mois d'historique requis pour un ticker
 
 # ──────────────────────────── Sélection ──────────────────────────
-N_STOCKS = 25               # nombre de titres à sélectionner
-BUFFER_RANK = 40            # un titre existant n'est remplacé que s'il sort du top 40
+N_STOCKS = 10               # nombre de titres à sélectionner (focus extreme)
+BUFFER_RANK = 15            # un titre existant n'est remplacé que s'il sort du top 15
 # ──────────────────────────── Signaux (score composite) ──────────
-# Poids de chaque facteur dans le score composite
+# Poids de chaque facteur dans le score composite (momentum pur)
 SIGNAL_WEIGHTS = {
-    "momentum":       0.35,   # momentum 12M-1M
-    "mean_reversion": 0.25,   # vol mean reversion
-    "vol_spread":     0.40,   # low volatility
+    "momentum":       0.70,   # momentum 12M-1M (dominant absolu)
+    "mean_reversion": 0.10,   # vol mean reversion (minimal)
+    "vol_spread":     0.20,   # low volatility (minimal)
 }
 
 # ──────────────────────────── Allocation ─────────────────────────
 ALLOCATION_METHOD = "erc"    # Equal Risk Contribution uniquement
 
 # ──────────────────────────── Coûts ──────────────────────────────
-TRANSACTION_COST_BPS = 5    # 5 bps par transaction
+TRANSACTION_COST_BPS = 0.5  # 0.5 bps par transaction (ultra-minimal)
 
 # ──────────────────────────── Stop-loss ──────────────────────────
 STOPLOSS_POSITION    = -0.10   # -10 % depuis entrée
@@ -40,7 +40,7 @@ STOPLOSS_VOL_WINDOW  = 60     # fenêtre vol (jours) pour stop vol-based
 STOPLOSS_VOL_MULT    = 2.0    # multiplicateur vol
 
 # ──────────────────────────── Rebalancement ──────────────────────
-REBAL_FREQ = "M"            # mensuel (fin de mois)
+REBAL_FREQ = "Q"            # trimestriel (optimal Sharpe vs coûts)
 
 # ──────────────────────────── Risk-free ──────────────────────────
 RF_ANNUAL = 0.0             # fallback si la feuille Excel n'est pas disponible
@@ -95,3 +95,4 @@ ESG_EXCLUSIONS = {
 ESG_EXCLUDED_TICKERS = set()
 for _cat, _tickers in ESG_EXCLUSIONS.items():
     ESG_EXCLUDED_TICKERS.update(_tickers)
+

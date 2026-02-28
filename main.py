@@ -37,6 +37,9 @@ def print_current_portfolio(result: dict):
         print("\n  [!] Aucun portefeuille à afficher.")
         return
 
+    # Normaliser les poids pour qu'ils totalisent exactement 1.0
+    last_w = last_w / last_w.sum()
+    
     # Trier par poids décroissant
     last_w = last_w.sort_values(ascending=False)
 
@@ -56,14 +59,27 @@ def print_current_portfolio(result: dict):
     print(f"  {'TOTAL':<16} {last_w.sum():>11.4%}")
     print()
 
-    # Export CSV
-    csv_path = OUTPUT_DIR / "current_portfolio.csv"
+    # Export Excel avec poids normalisés et format numérique
+    xlsx_path = OUTPUT_DIR / "current_portfolio.xlsx"
     df_export = pd.DataFrame({
         "Ticker": last_w.index,
-        "Weight": last_w.values.round(4),
+        "Weight": last_w.values,  # Valeurs exactes sans arrondi
     })
-    df_export.to_csv(csv_path, index=False)
-    print(f"  [OK] Portefeuille exporté dans {csv_path}")
+    # Noter que la somme est exactement 1.0
+    assert abs(df_export["Weight"].sum() - 1.0) < 1e-10, f"Poids non normalisés: {df_export['Weight'].sum()}"
+    
+    # Exporter vers Excel avec formatage
+    try:
+        with pd.ExcelWriter(xlsx_path, engine='openpyxl') as writer:
+            df_export.to_excel(writer, sheet_name='Portfolio', index=False, float_format='%.8f')
+        print(f"  [OK] Portefeuille exporté dans {xlsx_path}")
+        print(f"  [✓] Somme des poids vérifiée: {df_export['Weight'].sum():.10f}")
+    except ImportError:
+        # Fallback vers CSV si openpyxl n'est pas disponible
+        csv_path = OUTPUT_DIR / "current_portfolio.csv"
+        df_export.to_csv(csv_path, index=False, float_format='%.8f')
+        print(f"  [OK] Portefeuille exporté dans {csv_path} (Excel non disponible)")
+        print(f"  [✓] Somme des poids vérifiée: {df_export['Weight'].sum():.10f}")
 
 
 def main():

@@ -29,7 +29,7 @@ from config import START_DATE, END_DATE, N_STOCKS, OUTPUT_DIR, ESG_EXCLUSIONS, E
 
 
 def print_current_portfolio(result: dict):
-    """Affiche les 25 titres et leurs poids pour la dernière période."""
+    """Affiche les titres (20 hybride) et leurs poids pour la dernière période."""
     last_w = result["last_weights"]
     last_date = result["last_date"]
 
@@ -42,8 +42,9 @@ def print_current_portfolio(result: dict):
 
     print("\n" + "=" * 60)
     print(f"  PORTEFEUILLE ACTUEL — {last_date.strftime('%Y-%m-%d')}")
-    print(f"  Méthode : Score Composite + ERC Long-Only (ESG)")
-    print(f"  Nombre de titres : {len(last_w)}")
+    print(f"  Méthode : Stratégie Hybride VALUE/SIZE + COMPOSITE (ESG)")
+    print(f"  Allocation : 30% VALUE/SIZE (5 actions) + 70% COMPOSITE (15 actions)")
+    print(f"  Nombre total de titres : {len(last_w)}")
     print("=" * 60)
     print(f"  {'#':<4} {'Ticker':<12} {'Poids':>10}")
     print("  " + "-" * 28)
@@ -67,19 +68,20 @@ def print_current_portfolio(result: dict):
 
 def main():
     print("=" * 60)
-    print("  BACKTEST LONG-ONLY ERC — S&P 500 (filtre ESG)")
-    print(f"  Top {N_STOCKS} titres par score composite")
+    print("  BACKTEST HYBRIDE VALUE/SIZE + COMPOSITE — S&P 500 (filtre ESG)")
+    print(f"  Portefeuille Hybride : 30% VALUE/SIZE (5 actions) + 70% COMPOSITE (15 actions)")
     print("=" * 60)
 
     # ── 1. Chargement des données ──
     print("\n[1/4] Chargement des données...")
     data = load_all()
 
-    prices     = data["prices"]
-    returns    = data["returns"]
-    df_long    = data["df_long"]
-    rf_annual  = data["rf_annual"]
-    df_sectors = data["df_sectors"]
+    prices      = data["prices"]
+    returns     = data["returns"]
+    df_long     = data["df_long"]
+    rf_annual   = data["rf_annual"]
+    df_sectors  = data["df_sectors"]
+    fundamentals = data["fundamentals"]
 
     # Initialiser le taux sans risque dans metrics
     set_rf_series(rf_annual)
@@ -118,10 +120,12 @@ def main():
         print(f"  Rf moyen : {rf_annual.mean():.2%} annualise")
 
     # ── 2. Lancement du backtest ──
-    print("\n[2/4] Lancement du backtest Long-Only ERC (ESG)...")
+    print("\n[2/4] Lancement du backtest Hybride VALUE/SIZE + COMPOSITE (ESG)...")
 
     result = run_backtest(
         prices, returns, df_long,
+        fundamentals=fundamentals,
+        use_hybrid_strategy=True,
         stoploss_type="position",
         verbose=True,
     )

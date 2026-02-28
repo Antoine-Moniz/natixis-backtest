@@ -68,6 +68,39 @@ def load_risk_free(path=DATA_FILE) -> pd.Series:
     return rf_annual
 
 
+def load_pb_ratio(path=DATA_FILE) -> pd.DataFrame:
+    """
+    Charge les ratios P/B depuis la feuille SPX_PX_TO_BOOK_RATIO.
+    """
+    df = pd.read_excel(path, sheet_name="SPX_PX_TO_BOOK_RATIO")
+    date_col = df.columns[0]
+    df[date_col] = pd.to_datetime(df[date_col], dayfirst=True)
+    df = df.set_index(date_col).sort_index()
+    return df.select_dtypes(include=[np.number])
+
+
+def load_pe_ratio(path=DATA_FILE) -> pd.DataFrame:
+    """
+    Charge les ratios P/E depuis la feuille SPX_PE_RATIO.
+    """
+    df = pd.read_excel(path, sheet_name="SPX_PE_RATIO")
+    date_col = df.columns[0]
+    df[date_col] = pd.to_datetime(df[date_col], dayfirst=True)
+    df = df.set_index(date_col).sort_index()
+    return df.select_dtypes(include=[np.number])
+
+
+def load_market_cap(path=DATA_FILE) -> pd.DataFrame:
+    """
+    Charge les market caps depuis la feuille SPX_CUR_MKT_CAP.
+    """
+    df = pd.read_excel(path, sheet_name="SPX_CUR_MKT_CAP")
+    date_col = df.columns[0]
+    df[date_col] = pd.to_datetime(df[date_col], dayfirst=True)
+    df = df.set_index(date_col).sort_index()
+    return df.select_dtypes(include=[np.number])
+
+
 def load_sectors(path=DATA_FILE) -> pd.DataFrame:
     """
     Charge les secteurs depuis la feuille SPX_Sector.
@@ -189,7 +222,8 @@ def load_all(path=DATA_FILE):
         "spx_daily"      : Series SPX daily
         "rf_annual"      : Series taux sans risque annuel
         "sofr_plus_4_m"  : Series SOFR + 4% mensuel
-        "df_sectors"     : DataFrame mapping ticker -> secteur
+        "df_sectors"     : DataFrame mapping ticker -> secteur 
+        "fundamentals"   : Dict avec pb_ratio, pe_ratio, market_cap
         "rebal_dates"    : list de dates de rebalancement
     """
     # Chargement
@@ -221,6 +255,29 @@ def load_all(path=DATA_FILE):
         print("  [!] Feuille SPX_Sector non trouvee -> secteurs vides")
         df_sectors = pd.DataFrame(columns=['ticker', 'sector'])
 
+    # Donnees fondamentales pour VALUE/SIZE
+    fundamentals = {}
+    try:
+        fundamentals['pb_ratio'] = load_pb_ratio(path)
+        print(f"  P/B ratios charges : {fundamentals['pb_ratio'].shape}")
+    except Exception as e:
+        print(f"  [!] P/B ratios non disponibles : {e}")
+        fundamentals['pb_ratio'] = pd.DataFrame()
+    
+    try:
+        fundamentals['pe_ratio'] = load_pe_ratio(path)
+        print(f"  P/E ratios charges : {fundamentals['pe_ratio'].shape}")
+    except Exception as e:
+        print(f"  [!] P/E ratios non disponibles : {e}")
+        fundamentals['pe_ratio'] = pd.DataFrame()
+    
+    try:
+        fundamentals['market_cap'] = load_market_cap(path)
+        print(f"  Market Cap charge : {fundamentals['market_cap'].shape}")
+    except Exception as e:
+        print(f"  [!] Market Cap non disponible : {e}")
+        fundamentals['market_cap'] = pd.DataFrame()
+
     # Pivot + filtre
     prices = pivot_prices(df_long)
     prices = filter_universe(prices)
@@ -240,6 +297,7 @@ def load_all(path=DATA_FILE):
         "rf_annual":      rf_annual,
         "sofr_plus_4_m":  sofr_plus_4_m,
         "df_sectors":     df_sectors,
+        "fundamentals":   fundamentals,
         "rebal_dates":    rebal_dates,
     }
 
@@ -254,4 +312,7 @@ if __name__ == "__main__":
     print("Rf annual pts    :", len(data["rf_annual"]))
     print("SOFR+4% pts      :", len(data["sofr_plus_4_m"]))
     print("Secteurs shape   :", data["df_sectors"].shape)
+    print("P/B ratios shape :", data["fundamentals"]["pb_ratio"].shape)
+    print("P/E ratios shape :", data["fundamentals"]["pe_ratio"].shape)
+    print("Market Cap shape :", data["fundamentals"]["market_cap"].shape)
     print("Exemple tickers  :", list(data["prices"].columns[:5]))

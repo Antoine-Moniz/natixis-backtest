@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 
 from config import START_DATE, END_DATE, N_STOCKS, REBAL_FREQ
-from signals import select_top_n
+from signals import select_top_n, select_hybrid_portfolio
 from allocation import allocate
 from costs import compute_turnover, compute_cost
 from data_loader import get_members_at_date
@@ -64,6 +64,8 @@ def run_backtest(
     prices: pd.DataFrame,
     returns: pd.DataFrame,
     df_long: pd.DataFrame,
+    fundamentals: dict = None,
+    use_hybrid_strategy: bool = False,
     stoploss_type: str = "position",
     verbose: bool = False,
 ) -> dict:
@@ -75,6 +77,8 @@ def run_backtest(
     prices       : DataFrame (date × ticker) — prix mensuels
     returns      : DataFrame (date × ticker) — rendements mensuels
     df_long      : DataFrame format long (date, ticker, px_last)
+    fundamentals : dict avec clés pb_ratio, pe_ratio, market_cap — données fondamentales
+    use_hybrid_strategy : bool — utilise la stratégie hybride VALUE/SIZE + COMPOSITE
     stoploss_type: type de stop-loss ("position", "trailing", "portfolio", "volatility")
     verbose      : affiche le détail à chaque date
 
@@ -126,9 +130,15 @@ def run_backtest(
         # ── 1. Univers à la date ──
         members = get_members_at_date(df_long, date)
 
-        # ── 2. Sélection top N par score composite (avec buffer) ──
-        stock_list = select_top_n(prices, t, members=members, n=N_STOCKS,
-                                  prev_stocks=prev_stocks)
+        # ── 2. Sélection top N par score composite ou hybride ──
+        if use_hybrid_strategy and fundamentals:
+            stock_list = select_hybrid_portfolio(
+                prices, fundamentals, t, members=members
+            )
+        else:
+            stock_list = select_top_n(prices, t, members=members, n=N_STOCKS,
+                                      prev_stocks=prev_stocks)
+                
         if not stock_list:
             continue
 

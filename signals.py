@@ -221,3 +221,132 @@ def select_top_n(
         kept = kept_scores.head(n).index.tolist()
 
     return kept
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  VALUE et SIZE strategies
+# ═══════════════════════════════════════════════════════════════════
+
+def compute_value_score(fundamentals: dict, t: int, members: list = None) -> pd.Series:
+    """
+    Score VALUE basé sur P/B et P/E ratios.
+    Plus le ratio est faible (valorisation cheap), meilleur le score.
+    """
+    pb_df = fundamentals.get('pb_ratio', pd.DataFrame())
+    pe_df = fundamentals.get('pe_ratio', pd.DataFrame())
+    
+    if pb_df.empty and pe_df.empty:
+        return pd.Series(dtype=float)
+    
+    scores = pd.Series(dtype=float)
+    
+    # P/B ratio : plus faible = meilleur
+    if not pb_df.empty and t < len(pb_df):
+        pb_values = pb_df.iloc[t].dropna()
+        if len(pb_values) > 1:
+            pb_zscore = (pb_values - pb_values.mean()) / pb_values.std()
+            pb_score = -pb_zscore  # Inverser : faible P/B = score élevé
+            scores = scores.add(pb_score, fill_value=0)
+    
+    # P/E ratio : plus faible = meilleur
+    if not pe_df.empty and t < len(pe_df):
+        pe_values = pe_df.iloc[t].dropna()
+        if len(pe_values) > 1:
+            pe_zscore = (pe_values - pe_values.mean()) / pe_values.std()
+            pe_score = -pe_zscore  # Inverser : faible P/E = score élevé  
+            scores = scores.add(pe_score, fill_value=0)
+    
+    # Filtrer par membres autorisés
+    if members is not None:
+        scores = scores.reindex(members).dropna()
+    
+    return scores.sort_values(ascending=False)
+
+
+def compute_size_score(fundamentals: dict, t: int, members: list = None) -> pd.Series:
+    """
+    Score SIZE basé sur Market Cap.
+    Plus la capitalisation est faible (small caps), meilleur le score.
+    """
+    mcap_df = fundamentals.get('market_cap', pd.DataFrame())
+    
+    if mcap_df.empty or t >= len(mcap_df):
+        return pd.Series(dtype=float)
+    
+    mcap_values = mcap_df.iloc[t].dropna()
+    
+    if len(mcap_values) <= 1:
+        return pd.Series(dtype=float)
+    
+    # Inverser : petite capitalisation = score élevé
+    mcap_zscore = (mcap_values - mcap_values.mean()) / mcap_values.std()
+    size_score = -mcap_zscore
+    
+    # Filtrer par membres autorisés
+    if members is not None:
+        size_score = size_score.reindex(members).dropna()
+    
+    return size_score.sort_values(ascending=False)
+
+
+def compute_value_size_score(fundamentals: dict, t: int, members: list = None) -> pd.Series:
+    """
+    Score combiné VALUE + SIZE avec pondération égale.
+    """
+    value_score = compute_value_score(fundamentals, t, members)
+    size_score = compute_size_score(fundamentals, t, members)
+    
+    # Combiner avec normalisation
+    combined_score = pd.Series(dtype=float)
+    all_tickers = set()
+    
+    if not value_score.empty:
+        all_tickers.update(value_score.index)
+    if not size_score.empty:
+        all_tickers.update(size_score.index)
+    
+    if not all_tickers:
+        return pd.Series(dtype=float)
+    
+    # Normaliser et combiner
+    for ticker in all_tickers:
+        score = 0.0
+        count = 0
+        
+        if ticker in value_score.index:
+            score += value_score[ticker]
+            count += 1
+        if ticker in size_score.index:
+            score += size_score[ticker]
+            count += 1
+        
+        if count > 0:
+            combined_score[ticker] = score / count
+    
+    return combined_score.sort_values(ascending=False)
+
+
+def select_hybrid_portfolio(prices: pd.DataFrame, fundamentals: dict, t: int, 
+                           members: list = None, n_composite: int = 15, n_value_size: int = 5) -> list:
+    """
+    Sélection hybride : 70% composite (15 actions) + 30% value/size (5 actions).
+    """
+    # Sélection composite (momentum dominant)
+    composite_selected = select_top_n(prices, t, members=members, n=n_composite)
+    
+    # Sélection value/size
+    value_size_score = compute_value_size_score(fundamentals, t, members=members)
+    value_size_selected = value_size_score.head(n_value_size).index.tolist()
+    
+    # Éviter les doublons
+    value_size_final = [ticker for ticker in value_size_selected 
+                       if ticker not in composite_selected]
+    
+    # Si pas assez de titres value/size uniques, compléter avec composite
+    if len(value_size_final) < n_value_size:
+        needed = n_value_size - len(value_size_final)
+        extra_composite = [ticker for ticker in value_size_score.index 
+                          if ticker not in composite_selected and ticker not in value_size_final]
+        value_size_final.extend(extra_composite[:needed])
+    
+    return composite_selected + value_size_final[:n_value_size]

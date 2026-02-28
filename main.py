@@ -104,14 +104,6 @@ def main():
         if found:
             print(f"      {cat} ({len(found)}) : {', '.join(found)}")
 
-    # ── Liste de tous les titres restants ──
-    all_tickers = sorted(prices.columns.tolist())
-    csv_path = OUTPUT_DIR / "all_tickers.csv"
-    try:
-        pd.DataFrame({"Ticker": all_tickers}).to_csv(csv_path, index=False)
-    except PermissionError:
-        print(f"  [!] Impossible d'écrire {csv_path} (fichier verrouillé)")
-
     print(f"\n  Prix     : {prices.shape[0]} dates x {prices.shape[1]} tickers")
     print(f"  Periode  : {prices.index[0].strftime('%Y-%m')} -> "
           f"{prices.index[-1].strftime('%Y-%m')}")

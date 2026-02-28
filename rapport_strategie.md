@@ -1,4 +1,4 @@
-# 📊 Stratégie - Challenge Natixis
+# 📊 Stratégie Hybride VALUE/SIZE + COMPOSITE - Challenge Natixis
 
 ## 🎯 **Objectif du Projet**
 
@@ -221,7 +221,7 @@ Backtest/
 
 ### Défis & Limites
 ⚠️ **Données fondamentales** : Dépendance qualité données P/B, P/E, Market Cap  
-⚠️ **Concentration modérée** : 20 titres 
+⚠️ **Concentration modérée** : 20 titres vs 25 initialement  
 ⚠️ **Biais technologique** : Sur-représentation IT (37.9%)  
 ⚠️ **Market timing** : Pas de signal "cash" en Bear Market  
 ⚠️ **Fallback fréquent** : Stratégie VALUE/SIZE peu utilisée (données manquantes)  

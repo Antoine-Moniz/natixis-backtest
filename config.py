@@ -30,7 +30,7 @@ SIGNAL_WEIGHTS = {
 ALLOCATION_METHOD = "erc"    # Equal Risk Contribution uniquement
 
 # ──────────────────────────── Coûts ──────────────────────────────
-TRANSACTION_COST_BPS = 0.5  # 0.5 bps par transaction (ultra-minimal)
+TRANSACTION_COST_BPS = 5    # 5 bps par transaction
 
 # ──────────────────────────── Stop-loss ──────────────────────────
 STOPLOSS_POSITION    = -0.10   # -10 % depuis entrée
@@ -40,7 +40,7 @@ STOPLOSS_VOL_WINDOW  = 60     # fenêtre vol (jours) pour stop vol-based
 STOPLOSS_VOL_MULT    = 2.0    # multiplicateur vol
 
 # ──────────────────────────── Rebalancement ──────────────────────
-REBAL_FREQ = "Q"            # trimestriel (optimal Sharpe vs coûts)
+REBAL_FREQ = "M"            # mensuel (plus de réactivité)
 
 # ──────────────────────────── Risk-free ──────────────────────────
 RF_ANNUAL = 0.0             # fallback si la feuille Excel n'est pas disponible

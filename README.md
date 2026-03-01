@@ -6,8 +6,8 @@ Stratégie **Long-Only Hybride** combinant approches quantitative et fondamental
 
 ### Contraintes du Challenge
 - ✅ **Long uniquement** (pas de vente à découvert)  
-- ✅ **20 titres sélectionnés** (5 VALUE/SIZE + 15 COMPOSITE)
-- ✅ **Univers S&P 500** (395 titres disponibles → 363 post-ESG)
+- ✅ **20 titres sélectionnés** (5 VALUE/SIZE + 15 COMPOSITE Momentum )
+- ✅ **Univers S&P 500** 
 - ✅ **Politique d'exclusion ESG** intégrée (32 exclusions)
 - ✅ **Rebalancement mensuel** (fin de mois)
 
@@ -105,20 +105,15 @@ bounds = [(0, None) for _ in range(n_stocks)]  # Poids ≥ 0
 
 ---
 
-## 🔧 **Évolution de la Stratégie**
+## 🔧 **Architecture de la Stratégie**
 
-### 1. Momentum Focus + Concentration (Phase 1)
-**Optimisation** : Poids momentum porté à 70% vs 35% initialement  
-**Concentration** : Réduction 25 → 10 actions pour maximiser alpha  
-**Résultat** : Sharpe 0.17 → 1.46 (+758%)
+### Conception Hybride VALUE/SIZE + COMPOSITE
+**Approche duale** : Combinaison 30% VALUE/SIZE + 70% COMPOSITE Momentum 
+**Concentration optimale** : 20 actions pour maximiser alpha tout en restant diversifié
+**Intégration fondamentaux** : P/B, P/E, Market Cap pour capture de valeur  
+**Résultat** : Performance élevée avec contrôle du risque
 
-### 2. Stratégie Hybride VALUE/SIZE (Phase 2)
-**Innovation** : Combinaison 30% VALUE/SIZE + 70% COMPOSITE  
-**Diversification** : Extension à 20 actions (5+15) pour équilibrer risque  
-**Fondamentaux** : Intégration P/B, P/E, Market Cap pour capture de valeur  
-**Résultat** : Maintien performance avec diversification accrue
-
-### 3. Améliorations Techniques
+### Robustesse Technique
 ```python
 # Fallback robuste en cas d'absence données fondamentales
 if value_size_score.empty:
@@ -135,14 +130,14 @@ value_size_final = [t for t in value_size_selected
 
 ### Métriques Principales
 
-| Métrique | Stratégie Hybride | Benchmark S&P 500 | vs Benchmark |
-|----------|-------------------|-------------------|---------------|
-| **CAGR** | 24.64% | ~10-12% | +12-14pp |
-| **Volatilité** | 11.92% | ~15-18% | -3-6pp |
-| **Sharpe Ratio** | 1.90 | ~0.6-0.8 | +1.1-1.3 |
-| **Sortino Ratio** | 3.73 | ~0.9-1.2 | +2.5-2.8 |
-| **Max Drawdown** | -8.98% | ~-15-20% | +6-11pp |
-| **Hit Ratio** | 73.33% | ~60% | +13pp |
+| Métrique | Stratégie Hybride | 
+|----------|-------------------|
+| **CAGR** | 24.64% | 
+| **Volatilité** | 11.92% | 
+| **Sharpe Ratio** | 1.90 | 
+| **Sortino Ratio** | 3.73 | 
+| **Max Drawdown** | -8.98% | 
+| **Hit Ratio** | 73.33% | 
 
 ### Performance Cumulative
 - **Return Total** : 815.07%

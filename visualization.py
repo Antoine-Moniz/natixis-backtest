@@ -862,3 +862,130 @@ def export_all_results(all_results: dict, summary_df: pd.DataFrame,
             df.to_excel(writer, sheet_name=sheet)
 
     print(f"\n[OK] Resultats exportes dans {out_path}")
+
+
+def plot_current_portfolio_weights(result: dict, title: str = "Current Portfolio Weights", save: bool = True):
+    """
+    Graphique en barres des poids de tous les titres du portefeuille actuel.
+    """
+    last_w = result["last_weights"]
+    last_date = result["last_date"]
+    
+    if last_w.empty or last_date is None:
+        print("  [!] Aucun portefeuille à afficher.")
+        return
+    
+    # Normaliser et trier par poids décroissant
+    last_w = last_w / last_w.sum()
+    last_w = last_w.sort_values(ascending=False)
+    
+    # Créer le graphique
+    fig, ax = plt.subplots(figsize=(16, 8))
+    
+    # Barres avec dégradé de couleurs
+    colors = plt.cm.Blues_r(np.linspace(0.3, 0.8, len(last_w)))
+    bars = ax.bar(range(len(last_w)), last_w.values * 100, color=colors)
+    
+    # Personnalisation
+    ax.set_xlabel("Tickers", fontsize=12, fontweight="bold")
+    ax.set_ylabel("Weight (%)", fontsize=12, fontweight="bold")
+    ax.set_title(f"{title} - {last_date.strftime('%Y-%m-%d')} ({len(last_w)} stocks)", 
+                 fontsize=14, fontweight="bold", pad=20)
+    
+    # Labels des tickers
+    ax.set_xticks(range(len(last_w)))
+    ax.set_xticklabels(last_w.index, rotation=45, ha='right', fontsize=10)
+    
+    # Grille et formatage
+    ax.grid(True, linestyle='--', alpha=0.7, axis='y')
+    ax.yaxis.set_major_formatter(mtick.PercentFormatter())
+    
+    # Annotations des poids sur les barres
+    for i, (ticker, weight) in enumerate(last_w.items()):
+        ax.text(i, weight * 100 + 0.1, f'{weight:.2%}', 
+                ha='center', va='bottom', fontsize=8, fontweight='bold')
+    
+    # Stats au-dessus du graphique  
+    total_weight = last_w.sum()
+    max_weight = last_w.max()
+    min_weight = last_w.min()
+    ax.text(0.02, 0.98, f'Total: {total_weight:.1%} | Max: {max_weight:.2%} | Min: {min_weight:.2%}', 
+            transform=ax.transAxes, fontsize=10, verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8))
+    
+    plt.tight_layout()
+    
+    if save:
+        out_path = OUTPUT_DIR / "current_portfolio_weights.png"
+        plt.savefig(out_path, dpi=300, bbox_inches="tight")
+        print(f"  [OK] Graphique sauvegardé: {out_path}")
+    
+    plt.show()
+    plt.close()
+
+
+def plot_current_portfolio_pie(result: dict, title: str = "Portfolio Allocation", save: bool = True):
+    """
+    Graphique camembert de la répartition des poids du portefeuille.
+    """
+    last_w = result["last_weights"]
+    last_date = result["last_date"]
+    
+    if last_w.empty or last_date is None:
+        print("  [!] Aucun portefeuille à afficher.")
+        return
+    
+    # Normaliser et trier par poids décroissant
+    last_w = last_w / last_w.sum()
+    last_w = last_w.sort_values(ascending=False)
+    
+    # Créer le graphique
+    fig, ax = plt.subplots(figsize=(12, 12))
+    
+    # Couleurs vives pour le camembert
+    colors = plt.cm.Set3(np.linspace(0, 1, len(last_w)))
+    
+    # Camembert avec labels et pourcentages
+    wedges, texts, autotexts = ax.pie(
+        last_w.values * 100,
+        labels=last_w.index,
+        autopct='%1.1f%%',
+        colors=colors,
+        startangle=90,
+        pctdistance=0.85,
+        labeldistance=1.05,
+        textprops={'fontsize': 10}
+    )
+    
+    # Style des pourcentages
+    for autotext in autotexts:
+        autotext.set_color('white')
+        autotext.set_fontweight('bold')
+        autotext.set_fontsize(9)
+    
+    # Style des labels
+    for text in texts:
+        text.set_fontsize(10)
+        text.set_fontweight('bold')
+    
+    # Titre
+    ax.set_title(f"{title} - {last_date.strftime('%Y-%m-%d')}\n({len(last_w)} Holdings)", 
+                 fontsize=16, fontweight="bold", pad=20)
+    
+    # Légende avec poids exacts à droite
+    legend_labels = [f'{ticker}: {weight:.2%}' for ticker, weight in last_w.items()]
+    ax.legend(wedges, legend_labels, title="Holdings", loc="center left", 
+              bbox_to_anchor=(1, 0, 0.5, 1), ncol=1, fontsize=9)
+    
+    # Égalité des axes pour un cercle parfait
+    ax.axis('equal')
+    
+    plt.tight_layout()
+    
+    if save:
+        out_path = OUTPUT_DIR / "current_portfolio_pie.png"
+        plt.savefig(out_path, dpi=300, bbox_inches="tight")
+        print(f"  [OK] Graphique camembert sauvegardé: {out_path}")
+    
+    plt.show()
+    plt.close()

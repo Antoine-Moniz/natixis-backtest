@@ -24,6 +24,7 @@ from visualization import (
     plot_annual_returns,
     plot_qq, plot_underwater,
     plot_current_portfolio_sectors, plot_sector_allocation_over_time,
+    plot_current_portfolio_weights, plot_current_portfolio_pie,
 )
 from config import START_DATE, END_DATE, N_STOCKS, OUTPUT_DIR, ESG_EXCLUSIONS, ESG_EXCLUDED_TICKERS
 
@@ -149,6 +150,10 @@ def main():
 
     # ── Affichage du portefeuille actuel (25 titres + poids) ──
     print_current_portfolio(result)
+    
+    # ── Graphiques du portefeuille ──
+    plot_current_portfolio_weights(result)
+    plot_current_portfolio_pie(result)
 
     # ── Analyse sectorielle ──
     print("\n[3.5/4] Analyse sectorielle...")

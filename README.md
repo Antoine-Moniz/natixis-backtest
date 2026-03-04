@@ -204,29 +204,6 @@ Backtest/
 
 ---
 
-## 📋 **Conclusions**
-
-### Forces de la Stratégie Hybride
-✅ **Performance ajustée du risque** : Sharpe 1.90 vs marché ~0.7  
-✅ **Drawdown maîtrisé** : Max DD -8.98% vs marché ~-20%  
-✅ **Diversification équilibrée** : 20 actions, 6 secteurs représentés  
-✅ **Approche multi-factorielle** : VALUE/SIZE + COMPOSITE complémentaires  
-✅ **Robustesse technique** : Fallback automatique, évitement doublons  
-✅ **Compliance ESG** : 32 exclusions respectées rigoureusement  
-
-### Défis & Limites
-⚠️ **Données fondamentales** : Dépendance qualité données P/B, P/E, Market Cap  
-⚠️ **Concentration modérée** : 20 titres 
-⚠️ **Biais technologique** : Sur-représentation IT (37.9%)  
-⚠️ **Market timing** : Pas de signal "cash" en Bear Market  
-⚠️ **Fallback fréquent** : Stratégie VALUE/SIZE peu utilisée (données manquantes)  
-
-### Recommandations
-1. **Amélioration données fondamentales** : Sources alternatives P/B, P/E
-2. **Contraintes sectorielles** : Limite max 40% par secteur GICS
-3. **Backtests crise** : Validation 2008, 2020 pour stress-test
-4. **Monitoring VALUE/SIZE** : Tracking effectivité poche fondamentale
-5. **Out-of-sample** validation sur données post-2025
 
 ---
   

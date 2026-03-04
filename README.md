@@ -180,27 +180,6 @@ Backtest/
 
 ---
 
-## 🚀 **Améliorations Futures**
-
-### 1. Données Fondamentales
-- **Value** : P/E, P/B, Dividend Yield
-- **Quality** : ROE, ROA, Debt/Capital  
-- **Growth** : Sales Growth, Earnings Growth
-
-### 2. Diversification Avancée
-- **Secteurs GICS** : Contraintes sectorielles (max 30% par secteur)
-- **Géographie** : Country of Risk, exposition régionale
-- **Market Cap** : Tilt Small/Mid/Large cap
-
-### 3. Risk Management
-- **VaR dynamique** : Ajustement positions selon VaR
-- **Corrélations** : Monitoring corrélations croisées  
-- **Liquidité** : Filtres volume minimum
-
-### 4. Facteurs Alternatifs
-- **Momentum cross-sectionnel** : Rank-based momentum
-- **Low Beta** : Anomalie Beta  
-- **Profitabilité** : Gross Margins, ROIC
 
 ---
 
